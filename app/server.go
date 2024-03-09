@@ -2,8 +2,10 @@ package main
 
 import (
 	"fmt"
+	"io"
 	"log"
 	"net"
+	"os"
 	"strings"
 )
 
@@ -41,7 +43,7 @@ func parseRequest(req []byte) Request {
 	return request
 }
 
-func handleConnection(conn net.Conn) {
+func handleConnection(conn net.Conn, directory string) {
 	defer func() {
 		_ = conn.Close()
 	}()
@@ -65,7 +67,6 @@ func handleConnection(conn net.Conn) {
 		_, _ = conn.Write([]byte("HTTP/1.1 200 OK\r\n\r\n"))
 		return
 	} else if strings.HasPrefix(request.URI, "/echo") {
-		// get the message from the URI after the /echo
 		message := strings.TrimPrefix(request.URI, "/echo/")
 		response := fmt.Sprintf("HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: %d\r\n\r\n%s", len(message), message)
 		_, _ = conn.Write([]byte(response))
@@ -74,15 +75,59 @@ func handleConnection(conn net.Conn) {
 		response := fmt.Sprintf("HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: %d\r\n\r\n%s",
 			len(userAgentHeader), userAgentHeader)
 		_, _ = conn.Write([]byte(response))
+	} else if strings.HasPrefix(request.URI, "/files/") {
+		filePath := strings.TrimPrefix(request.URI, "/files/")
+		file, err := os.Open(directory + "/" + filePath)
+		if err != nil {
+			_, _ = conn.Write([]byte("HTTP/1.1 404 Not Found\r\n\r\n"))
+			return
+		}
+
+		// read the file
+
+		fileBody, err := io.ReadAll(file)
+		if err != nil {
+			_, _ = conn.Write([]byte("HTTP/1.1 500 Internal Server Error\r\n\r\n"))
+			return
+		}
+
+		response := fmt.Sprintf(
+			"HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream\r\nContent-Length: %d\r\n\r\n%s",
+			len(fileBody), fileBody,
+		)
+		_, _ = conn.Write([]byte(response))
 	} else {
 		_, _ = conn.Write([]byte("HTTP/1.1 404 Not Found\r\n\r\n"))
 		return
 	}
 }
 
+func parseFlags(args []string) map[string]string {
+	flags := make(map[string]string)
+	for i, arg := range args {
+		if strings.HasPrefix(arg, "--") {
+			if strings.Contains(arg, "=") {
+				flag := strings.Split(arg, "=")
+				flags[flag[0][2:]] = flag[1]
+			} else {
+				flags[args[i][2:]] = args[i+1]
+			}
+		}
+	}
+	return flags
+}
+
 func main() {
 	var addr = "localhost:4221"
 	log.Printf("Server started on: %s", addr)
+
+	flags := parseFlags(os.Args)
+	directory, ok := flags["directory"]
+	if ok {
+		log.Printf("Serving files from: %s", directory)
+	} else {
+		log.Printf("Serving files from: %s", ".")
+	}
 
 	listen, err := net.Listen("tcp", addr)
 	if err != nil {
@@ -94,6 +139,6 @@ func main() {
 		if err != nil {
 			log.Fatal(err)
 		}
-		go handleConnection(conn)
+		go handleConnection(conn, directory)
 	}
 }
