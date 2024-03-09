@@ -9,6 +9,7 @@ import (
 
 type Request struct {
 	Method   string
+	Headers  map[string]string
 	URI      string
 	Protocol string
 }
@@ -26,6 +27,16 @@ func parseRequest(req []byte) Request {
 	request.Method = firstLine[0]
 	request.URI = firstLine[1]
 	request.Protocol = firstLine[2]
+
+	// parse the headers
+	request.Headers = make(map[string]string)
+	for _, line := range lines[1:] {
+		if line == "" {
+			break // end of headers section
+		}
+		header := strings.Split(line, ": ")
+		request.Headers[header[0]] = header[1]
+	}
 
 	return request
 }
@@ -57,6 +68,11 @@ func handleConnection(conn net.Conn) {
 		// get the message from the URI after the /echo
 		message := strings.TrimPrefix(request.URI, "/echo/")
 		response := fmt.Sprintf("HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: %d\r\n\r\n%s", len(message), message)
+		_, _ = conn.Write([]byte(response))
+	} else if request.URI == "/user-agent" {
+		userAgentHeader := request.Headers["User-Agent"]
+		response := fmt.Sprintf("HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: %d\r\n\r\n%s",
+			len(userAgentHeader), userAgentHeader)
 		_, _ = conn.Write([]byte(response))
 	} else {
 		_, _ = conn.Write([]byte("HTTP/1.1 404 Not Found\r\n\r\n"))
