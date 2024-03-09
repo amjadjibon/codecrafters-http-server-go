@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"log"
 	"net"
 	"strings"
@@ -52,6 +53,11 @@ func handleConnection(conn net.Conn) {
 	if request.URI == "/" || request.URI == "/index.html" {
 		_, _ = conn.Write([]byte("HTTP/1.1 200 OK\r\n\r\n"))
 		return
+	} else if strings.HasPrefix(request.URI, "/echo") {
+		// get the message from the URI after the /echo
+		message := strings.TrimPrefix(request.URI, "/echo/")
+		response := fmt.Sprintf("HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: %d\r\n\r\n%s", len(message), message)
+		_, _ = conn.Write([]byte(response))
 	} else {
 		_, _ = conn.Write([]byte("HTTP/1.1 404 Not Found\r\n\r\n"))
 		return
