@@ -94,6 +94,6 @@ func main() {
 		if err != nil {
 			log.Fatal(err)
 		}
-		handleConnection(conn)
+		go handleConnection(conn)
 	}
 }
